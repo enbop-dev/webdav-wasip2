@@ -41,18 +41,23 @@ Use a different guest-visible root with `WEBDAV_FS_ROOT`:
 
 ```bash
 mkdir -p shared
-WEBDAV_FS_ROOT=shared wasmtime run -Scli -Stcp -Sinherit-network \
+wasmtime run -Scli -Stcp -Sinherit-network --env WEBDAV_FS_ROOT=shared \
   --dir ./shared::shared target/wasm32-wasip2/release/webdav-wasi.wasm \
   --addr 127.0.0.1:8080
 ```
 
 If no filesystem root is detected, the app falls back to the in-memory demo backend.
 
-Native smoke test:
+Native smoke test (always uses isolated in-memory data):
 
 ```bash
 cargo run --bin webdav-wasi -- --smoke-test
 ```
+
+The smoke test ignores `--fs-root`, `WEBDAV_FS_ROOT`, and any local `data/`
+directory. It checks the listener and HTTP handler without creating or changing
+service files. To test the filesystem backend, start the server with a disposable
+`--fs-root` directory and exercise file operations through WebDAV.
 
 Native server:
 
@@ -67,6 +72,8 @@ support for native and component builds.
 
 - All requests in one service process share the same backend state.
 - File IO currently uses synchronous `std::fs` through WASI filesystem hostcalls.
+  Long filesystem operations can block other requests on the shared current-thread
+  runtime; this remains an accepted limitation of this experimental backend.
 - The guest can only access directories preopened with `--dir`.
 - WebDAV properties are currently no-op, matching the minimal [fungi](https://github.com/enbop/fungi) extraction.
 - Client compatibility still needs real-world testing with Finder, Windows WebDAV, Cyberduck, rclone, and similar clients.

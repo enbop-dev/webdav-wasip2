@@ -24,10 +24,11 @@ async fn main() -> anyhow::Result<()> {
     let args = parse_args()?;
 
     if args.smoke_test {
-        return run_smoke_test(args.fs_root.as_deref()).await;
+        return run_smoke_test().await;
     }
 
-    run_server(args.addr, args.fs_root.as_deref()).await
+    let fs_root = args.fs_root.or_else(detect_fs_root);
+    run_server(args.addr, fs_root.as_deref()).await
 }
 
 fn parse_args() -> anyhow::Result<Args> {
@@ -35,7 +36,7 @@ fn parse_args() -> anyhow::Result<Args> {
     let mut parsed = Args {
         addr: "127.0.0.1:8080".parse().unwrap(),
         smoke_test: false,
-        fs_root: detect_fs_root(),
+        fs_root: None,
     };
 
     while let Some(arg) = args.next() {
@@ -87,16 +88,11 @@ async fn run_server(addr: SocketAddr, fs_root: Option<&str>) -> anyhow::Result<(
     }
 }
 
-async fn run_smoke_test(fs_root: Option<&str>) -> anyhow::Result<()> {
-    match fs_root {
-        Some(root) => {
-            let backend = FileSystemBackend::new(root)
-                .with_context(|| format!("failed to initialize file backend at {root}"))?;
-            ensure_smoke_test_fixture(&backend).await?;
-            run_smoke_test_with_backend(backend).await
-        }
-        None => run_smoke_test_with_backend(MemoryBackend::demo()).await,
-    }
+async fn run_smoke_test() -> anyhow::Result<()> {
+    // Smoke tests must never seed or truncate files in a user's service root.
+    let backend = MemoryBackend::default();
+    ensure_smoke_test_fixture(&backend).await?;
+    run_smoke_test_with_backend(backend).await
 }
 
 async fn run_smoke_test_with_backend<B>(backend: B) -> anyhow::Result<()>
